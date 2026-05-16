@@ -1,15 +1,26 @@
 name: release
 
 # Fires on:
-#   - push to main          (build + upload artifact; no public release)
-#   - push of a v* tag      (build + upload + publish a GitHub Release)
-#   - workflow_dispatch     (build + upload; release only if dispatched on a tag)
+#   - push to main          (build x64+arm64 matrix, upload artifacts; no public release)
+#   - push of a v* tag      (build matrix, upload, publish a GitHub Release with both bundles)
+#   - workflow_dispatch     (build matrix, upload; release only if dispatched on a tag)
 #
 # Non-tag builds use a 0.0.0-<short-sha> version so artifacts can be
 # downloaded from the workflow run page for smoke-testing without
 # publishing anything.
 #
-# Triggering a public release: git tag v1.0.1 && git push origin v1.0.1
+# Pipeline:
+#   build-arm64-dll  builds vigemclient.arm64.dll from upstream
+#                    nefarius/ViGEmClient source (no precompiled arm64
+#                    binary is published by Nefarius).
+#   build            matrix over [x64, arm64]. x64 uses the vendored
+#                    src/vigemclient.x64.dll; arm64 pulls the artifact
+#                    from build-arm64-dll. Produces DualSenseXBridge-<arch>.msi
+#                    and DualSenseXBridge-<version>-<arch>.zip.
+#   release          downloads both bundle zips and creates one release.
+#                    Only runs on tag push (is_release output gate).
+#
+# Triggering a public release: git tag v1.1.0 && git push origin v1.1.0
 
 on:
   push:
@@ -19,13 +30,64 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # required for softprops/action-gh-release (tag builds only)
+  contents: write   # softprops/action-gh-release needs this (tag builds only)
+
+env:
+  # nefarius/ViGEmClient pinned ref. Update intentionally; bumping changes
+  # the bundled native client lib for both arches.
+  VIGEMCLIENT_REF: master
 
 jobs:
-  build:
-    name: build msi + release bundle
+  build-arm64-dll:
+    name: build vigemclient.arm64.dll from source
     runs-on: windows-latest
+    steps:
+      - name: checkout nefarius/ViGEmClient
+        uses: actions/checkout@v4
+        with:
+          repository: nefarius/ViGEmClient
+          ref: ${{ env.VIGEMCLIENT_REF }}
+          submodules: recursive
+          path: vigemclient-src
 
+      - name: build ARM64 dll via cmake
+        shell: pwsh
+        working-directory: vigemclient-src
+        run: |
+          # Upstream sln declares only x86/x64. Use the CMake build with
+          # the Visual Studio generator + -A ARM64 to cross-compile.
+          # -DViGEmClient_DLL=ON flips the target from static lib to dll.
+          cmake -G "Visual Studio 17 2022" -A ARM64 -DViGEmClient_DLL=ON -S . -B build-arm64
+          if ($LASTEXITCODE -ne 0) { Write-Error "cmake configure failed"; exit 1 }
+          cmake --build build-arm64 --config Release --verbose
+          if ($LASTEXITCODE -ne 0) { Write-Error "cmake build failed"; exit 1 }
+          $dll = Get-ChildItem -Filter 'ViGEmClient.dll' -Recurse -Path build-arm64 |
+                 Select-Object -First 1
+          if (-not $dll) {
+            Write-Host "build tree contents:"
+            Get-ChildItem -Recurse build-arm64 | Select-Object FullName, Length |
+              Format-Table -AutoSize
+            Write-Error "ViGEmClient.dll not produced by build"
+            exit 1
+          }
+          Write-Host "produced: $($dll.FullName)  $($dll.Length) bytes"
+          Copy-Item $dll.FullName ../vigemclient.arm64.dll
+
+      - name: upload arm64 dll
+        uses: actions/upload-artifact@v4
+        with:
+          name: vigemclient-arm64
+          path: vigemclient.arm64.dll
+          if-no-files-found: error
+
+  build:
+    name: build msi (${{ matrix.arch }})
+    needs: build-arm64-dll
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -48,9 +110,16 @@ jobs:
             $v = "0.0.0-$sha"
             $isRelease = "false"
           }
-          "version=$v"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$v"            | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "version=$v  is_release=$isRelease"
+
+      - name: pull arm64 dll
+        if: matrix.arch == 'arm64'
+        uses: actions/download-artifact@v4
+        with:
+          name: vigemclient-arm64
+          path: src/
 
       - name: install WiX v3
         shell: pwsh
@@ -66,30 +135,31 @@ jobs:
         shell: pwsh
         working-directory: installer
         run: |
-          .\build.ps1
+          .\build.ps1 -Arch ${{ matrix.arch }}
 
       - name: compute sha256
         id: sha
         shell: pwsh
         run: |
-          $hash = (Get-FileHash installer/DualSenseXBridge.msi -Algorithm SHA256).Hash.ToLower()
+          $msi = "installer/DualSenseXBridge-${{ matrix.arch }}.msi"
+          $hash = (Get-FileHash $msi -Algorithm SHA256).Hash.ToLower()
           "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "sha256=$hash"
 
       - name: assemble release bundle
         shell: pwsh
         run: |
           $v = '${{ steps.ver.outputs.version }}'
-          $bundle = "DualSenseXBridge-$v"
+          $arch = '${{ matrix.arch }}'
+          $bundle = "DualSenseXBridge-$v-$arch"
           New-Item -ItemType Directory -Path $bundle | Out-Null
-          Copy-Item installer/DualSenseXBridge.msi  $bundle/
-          Copy-Item QUICKSTART.md                    $bundle/
-          Copy-Item README.md                        $bundle/
-          Copy-Item LICENSE                          $bundle/
-          Copy-Item -Recurse manifests               $bundle/
+          Copy-Item installer/DualSenseXBridge-$arch.msi $bundle/
+          Copy-Item QUICKSTART.md                        $bundle/
+          Copy-Item README.md                            $bundle/
+          Copy-Item LICENSE                              $bundle/
+          Copy-Item -Recurse manifests                   $bundle/
           @"
-          DualSense XBridge $v
-          ====================
+          DualSense XBridge $v ($arch)
+          ============================
 
           MSI installer + winget manifests + quickstart guide.
 
@@ -97,36 +167,70 @@ jobs:
               winget install --manifest manifests
 
           Or run the MSI directly:
-              msiexec /i DualSenseXBridge.msi /passive
+              msiexec /i DualSenseXBridge-$arch.msi /passive
 
-          SHA256(DualSenseXBridge.msi) = ${{ steps.sha.outputs.sha256 }}
+          SHA256(DualSenseXBridge-$arch.msi) = ${{ steps.sha.outputs.sha256 }}
           "@ | Out-File -FilePath "$bundle/INSTALL.txt" -Encoding utf8
           Compress-Archive -Path $bundle -DestinationPath "$bundle.zip"
-          Get-Item "$bundle.zip" | Format-List Name, Length
 
-      - name: upload workflow artifact
+      - name: upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DualSenseXBridge-${{ steps.ver.outputs.version }}
-          path: DualSenseXBridge-${{ steps.ver.outputs.version }}.zip
+          name: DualSenseXBridge-${{ steps.ver.outputs.version }}-${{ matrix.arch }}
+          path: DualSenseXBridge-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.zip
           if-no-files-found: error
 
+  release:
+    name: publish github release
+    needs: build
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: derive version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') { Write-Error "tag '$tag' invalid"; exit 1 }
+          "version=$($matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: download all bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DualSenseXBridge-*
+          path: bundles/
+          merge-multiple: true
+
+      - name: list bundles + hashes
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          Get-ChildItem bundles/ | Format-Table Name, Length
+
       - name: create github release
-        if: steps.ver.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: DualSenseXBridge-${{ steps.ver.outputs.version }}.zip
+          files: |
+            bundles/DualSenseXBridge-${{ steps.ver.outputs.version }}-x64.zip
+            bundles/DualSenseXBridge-${{ steps.ver.outputs.version }}-arm64.zip
           generate_release_notes: true
           body: |
-            **SHA256(DualSenseXBridge.msi)** = `${{ steps.sha.outputs.sha256 }}`
+            ## Architectures
+
+            - **x64** -- tested. Recommended for most Windows hosts.
+            - **arm64** -- built from source in CI; **not** hardware-tested
+              by the maintainers. Reports welcome on Snapdragon X / Surface
+              Pro X / Copilot+ PCs.
 
             ## Quick install (admin PowerShell)
 
             ```powershell
             winget install Nefarius.ViGEmBus
             winget install Nefarius.HidHide
-            # then run the MSI from this release, or extract the zip and:
-            winget install --manifest <zip>/manifests
+            # then run the matching MSI from this release:
+            msiexec /i DualSenseXBridge-x64.msi /passive
+            # or for arm64:
+            msiexec /i DualSenseXBridge-arm64.msi /passive
             ```
 
-            See `QUICKSTART.md` inside the zip for the full Warzone setup walkthrough.
+            See `QUICKSTART.md` inside each zip for the full Warzone setup walkthrough.
