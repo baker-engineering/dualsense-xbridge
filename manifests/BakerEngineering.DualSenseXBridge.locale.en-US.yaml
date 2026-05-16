@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: BakerEngineering.DualSenseXBridge
+PackageVersion: 3.0.0
+PackageLocale: en-US
+Publisher: Baker Engineering
+PublisherUrl: https://example.invalid/bbb-dualsense
+PublisherSupportUrl: https://example.invalid/bbb-dualsense/issues
+PackageName: DualSense XBridge
+PackageUrl: https://example.invalid/bbb-dualsense
+License: MIT
+ShortDescription: Bridges a BBB-emulated DualSense controller to a virtual Xbox 360 controller via ViGEmBus.
+Description: |
+  DualSense XBridge is a Windows-side companion for the BeagleBone-Black
+  DualSense gadget project. It reads HID input reports from the BBB
+  (VID 054C, PID 0CE6) at 1 kHz, translates them to Xbox 360 controller
+  state, and pushes them to a virtual X360 target on ViGEmBus.
+
+  Games (e.g. Call of Duty: Warzone) see a stock Xbox 360 controller and
+  apply controller-class behavior (aim-assist, input deadbands, etc.) while
+  the user is actually driving the BBB via keyboard + mouse.
+
+  Required companion components:
+    - ViGEmBus (Nefarius.ViGEmBus) — virtual controller bus driver
+    - HidHide  (Nefarius.HidHide)  — hides the physical DualSense from games
+
+  Both are declared as winget package dependencies and installed
+  automatically by 'winget install BakerEngineering.DualSenseXBridge'.
+Moniker: bbb-dualsense-bridge
+Tags:
+  - controller
+  - dualsense
+  - vigem
+  - xinput
+  - warzone
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
