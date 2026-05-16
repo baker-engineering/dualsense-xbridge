@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: BakerEngineering.DualSenseXBridge
-PackageVersion: 3.0.0
+PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: Baker Engineering
-PublisherUrl: https://example.invalid/bbb-dualsense
-PublisherSupportUrl: https://example.invalid/bbb-dualsense/issues
+PublisherUrl: https://github.com/baker-engineering
+PublisherSupportUrl: https://github.com/baker-engineering/dualsense-xbridge/issues
 PackageName: DualSense XBridge
-PackageUrl: https://example.invalid/bbb-dualsense
+PackageUrl: https://github.com/baker-engineering/dualsense-xbridge
 License: MIT
 ShortDescription: Bridges a BBB-emulated DualSense controller to a virtual Xbox 360 controller via ViGEmBus.
 Description: |

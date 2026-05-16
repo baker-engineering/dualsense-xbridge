@@ -1,5 +1,8 @@
 # DualSense XBridge
 
+**Project home:** https://github.com/baker-engineering/dualsense-xbridge
+| **License:** MIT | **Releases:** [GitHub Releases](https://github.com/baker-engineering/dualsense-xbridge/releases)
+
 A Windows-side translator that reads HID input reports from a
 DualSense-class USB device and re-emits them as a virtual Xbox 360
 controller via [ViGEmBus](https://github.com/nefarius/ViGEmBus).
@@ -82,19 +85,19 @@ winget install --manifest .
 
 For this to work locally, edit `BakerEngineering.DualSenseXBridge.installer.yaml`:
 1. Set `InstallerUrl:` to a local `file://` URL OR upload the MSI to your fileserver
-   and use the http URL (e.g. `http://192.168.1.5:8766/DualSenseXBridge-3.0.0.msi`).
+   and use the http URL (e.g. `http://192.168.1.5:8766/DualSenseXBridge.msi`).
 2. Replace `InstallerSha256:` with the SHA256 emitted by `build.ps1`.
 
 ## Publish to the public winget repo
 
 1. Get an Authenticode code-signing certificate; sign the MSI:
    ```
-   signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /a DualSenseXBridge-3.0.0.msi
+   signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /a DualSenseXBridge.msi
    ```
 2. Host the signed MSI somewhere stable (GitHub Releases works well).
 3. Set the real URL + SHA256 in `BakerEngineering.DualSenseXBridge.installer.yaml`.
 4. Fork `microsoft/winget-pkgs`, add manifests under
-   `manifests/b/BakerEngineering/DualSenseXBridge/3.0.0/`, open a PR.
+   `manifests/b/BakerEngineering/DualSenseXBridge/1.0.0/`, open a PR.
 
 ## What the MSI does on install
 
@@ -146,7 +149,7 @@ DPad nibble decode.
 - HidHide blocklist auto-config — currently the user must add the
   DualSense (VID_054C&PID_0CE6) to HidHide's blocklist manually after
   install. A post-install CustomAction could do this via `HidHideCLI`,
-  but the CLI requires admin and a re-launch — left for v3.1.
+  but the CLI requires admin and a re-launch — left for v1.1.
 - Steam Input PS-controller-disable auto-config — also currently manual
   (`SteamController_PSSupport=0` in `localconfig.vdf`). Out of scope for
   the bridge MSI; belongs in a separate setup helper.

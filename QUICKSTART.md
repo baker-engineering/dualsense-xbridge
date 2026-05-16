@@ -64,10 +64,10 @@ have to start anything by hand.
 
 ---
 
-## 2. Configure HidHide (one-time, manual until v3.1)
+## 2. Configure HidHide (one-time, manual until v1.1)
 
 HidHide ships with an empty blocklist. Until the bridge's post-install
-helper lands in v3.1, add the BBB DualSense by hand:
+helper lands in v1.1, add the BBB DualSense by hand:
 
 1. From the Start menu, open **HidHide Configuration Client** (admin
    prompt; allow).
