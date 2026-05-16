@@ -1,0 +1,116 @@
+name: release
+
+# Runs on every push of a v* tag. Builds the MSI, bundles it with the
+# quickstart + winget manifests into a single zip, and attaches the zip to
+# a GitHub Release.
+#
+# Triggering: git tag v3.0.0 && git push origin v3.0.0
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # required for softprops/action-gh-release
+
+jobs:
+  build:
+    name: build msi + release bundle
+    runs-on: windows-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: derive version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
+            Write-Error "tag '$tag' is not v<major>.<minor>.<patch>"
+            exit 1
+          }
+          $v = $matches[1]
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "version=$v"
+
+      - name: install WiX v3
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y --no-progress
+          $wixBin = 'C:\Program Files (x86)\WiX Toolset v3.14\bin'
+          if (-not (Test-Path $wixBin)) {
+            $wixBin = (Get-ChildItem 'C:\Program Files (x86)\WiX Toolset v3.*' -Directory | Select-Object -First 1).FullName + '\bin'
+          }
+          echo "$wixBin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: build msi
+        shell: pwsh
+        working-directory: installer
+        run: |
+          .\build.ps1
+
+      - name: compute sha256
+        id: sha
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash installer/DualSenseXBridge.msi -Algorithm SHA256).Hash.ToLower()
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "sha256=$hash"
+
+      - name: assemble release bundle
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          $bundle = "DualSenseXBridge-$v"
+          New-Item -ItemType Directory -Path $bundle | Out-Null
+          Copy-Item installer/DualSenseXBridge.msi  $bundle/
+          Copy-Item QUICKSTART.md                    $bundle/
+          Copy-Item README.md                        $bundle/
+          Copy-Item LICENSE                          $bundle/
+          Copy-Item -Recurse manifests               $bundle/
+          @"
+          DualSense XBridge $v
+          ====================
+
+          MSI installer + winget manifests + quickstart guide.
+
+          Install (admin PowerShell):
+              winget install --manifest manifests
+
+          Or run the MSI directly:
+              msiexec /i DualSenseXBridge.msi /passive
+
+          SHA256(DualSenseXBridge.msi) = ${{ steps.sha.outputs.sha256 }}
+          "@ | Out-File -FilePath "$bundle/INSTALL.txt" -Encoding utf8
+          Compress-Archive -Path $bundle -DestinationPath "$bundle.zip"
+          Get-Item "$bundle.zip" | Format-List Name, Length
+
+      - name: upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DualSenseXBridge-${{ steps.ver.outputs.version }}
+          path: DualSenseXBridge-${{ steps.ver.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: create github release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DualSenseXBridge-${{ steps.ver.outputs.version }}.zip
+          generate_release_notes: true
+          body: |
+            **SHA256(DualSenseXBridge.msi)** = `${{ steps.sha.outputs.sha256 }}`
+
+            ## Quick install (admin PowerShell)
+
+            ```powershell
+            winget install Nefarius.ViGEmBus
+            winget install Nefarius.HidHide
+            # then run the MSI from this release, or extract the zip and:
+            winget install --manifest <zip>/manifests
+            ```
+
+            See `QUICKSTART.md` inside the zip for the full Warzone setup walkthrough.
