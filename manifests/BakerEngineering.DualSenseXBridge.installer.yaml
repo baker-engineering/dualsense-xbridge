@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: BakerEngineering.DualSenseXBridge
-PackageVersion: 1.0.0
+PackageVersion: 1.1.0
 Platform:
   - Windows.Desktop
 MinimumOSVersion: 10.0.0.0
@@ -16,12 +16,20 @@ Dependencies:
     - PackageIdentifier: Nefarius.HidHide
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/baker-engineering/dualsense-xbridge/releases/download/v1.0.0/DualSenseXBridge.msi
+    InstallerUrl: https://github.com/baker-engineering/dualsense-xbridge/releases/download/v1.1.0/DualSenseXBridge-x64.msi
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
     InstallerSwitches:
       Silent: /quiet
       SilentWithProgress: /passive
       Log: /l*v "<LOGPATH>"
-    ProductCode: '{4A094268-44D7-408C-A2FA-F565BF9EFCD1}'
+    ProductCode: '{8489E52E-0245-4234-AB0E-619436C5EF5F}'
+  - Architecture: arm64
+    InstallerUrl: https://github.com/baker-engineering/dualsense-xbridge/releases/download/v1.1.0/DualSenseXBridge-arm64.msi
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSwitches:
+      Silent: /quiet
+      SilentWithProgress: /passive
+      Log: /l*v "<LOGPATH>"
+    ProductCode: '{8489E52E-0245-4234-AB0E-619436C5EF5F}'
 ManifestType: installer
 ManifestVersion: 1.6.0

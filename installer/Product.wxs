@@ -12,10 +12,10 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
-  <Product Id="4a094268-44d7-408c-a2fa-f565bf9efcd1"
+  <Product Id="8489E52E-0245-4234-AB0E-619436C5EF5F"
            Name="DualSense XBridge"
            Language="1033"
-           Version="1.0.0.0"
+           Version="1.1.0.0"
            Manufacturer="Baker Engineering"
            UpgradeCode="9c6cbd2e-b1f4-4398-b2ec-1559e800c7fc">
 

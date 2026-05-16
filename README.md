@@ -97,7 +97,7 @@ For this to work locally, edit `BakerEngineering.DualSenseXBridge.installer.yaml
 2. Host the signed MSI somewhere stable (GitHub Releases works well).
 3. Set the real URL + SHA256 in `BakerEngineering.DualSenseXBridge.installer.yaml`.
 4. Fork `microsoft/winget-pkgs`, add manifests under
-   `manifests/b/BakerEngineering/DualSenseXBridge/1.0.0/`, open a PR.
+   `manifests/b/BakerEngineering/DualSenseXBridge/<version>/`, open a PR.
 
 ## What the MSI does on install
 
