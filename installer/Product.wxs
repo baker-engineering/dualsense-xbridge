@@ -22,7 +22,7 @@
     <Package InstallerVersion="500"
              Compressed="yes"
              InstallScope="perMachine"
-             Platform="x64"
+             Platform="$(sys.BUILDARCH)"
              Description="DualSense -> ViGEm X360 bridge" />
 
     <MediaTemplate EmbedCab="yes" />
@@ -35,7 +35,7 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="PUBLISHER_DIR" Name="BakerEngineering">
-          <Directory Id="INSTALLFOLDER" Name="DualSense-Bridge">
+          <Directory Id="INSTALLFOLDER" Name="DualSenseXBridge">
 
             <Component Id="BridgeScript" Guid="3bfa3f49-7f54-44c0-b9cc-c1137497010f" Win64="yes">
               <File Id="BridgePs1"
@@ -45,7 +45,8 @@
 
             <Component Id="VigemClientDll" Guid="bceaa9d9-20da-49cf-9be0-e917fc87ef50" Win64="yes">
               <File Id="VigemClientDllFile"
-                    Source="..\src\vigemclient.dll"
+                    Name="vigemclient.dll"
+                    Source="..\src\vigemclient.$(sys.BUILDARCH).dll"
                     KeyPath="yes" />
             </Component>
 
