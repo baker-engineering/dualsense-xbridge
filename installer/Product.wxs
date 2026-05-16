@@ -17,7 +17,7 @@
            Language="1033"
            Version="1.0.0.0"
            Manufacturer="Baker Engineering"
-           UpgradeCode="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0001">
+           UpgradeCode="9c6cbd2e-b1f4-4398-b2ec-1559e800c7fc">
 
     <Package InstallerVersion="500"
              Compressed="yes"
@@ -36,31 +36,31 @@
         <Directory Id="PUBLISHER_DIR" Name="BakerEngineering">
           <Directory Id="INSTALLFOLDER" Name="DualSense-Bridge">
 
-            <Component Id="BridgeScript" Guid="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0002">
+            <Component Id="BridgeScript" Guid="3bfa3f49-7f54-44c0-b9cc-c1137497010f">
               <File Id="BridgePs1"
                     Source="..\src\bridge.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="VigemClientDll" Guid="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0003">
+            <Component Id="VigemClientDll" Guid="bceaa9d9-20da-49cf-9be0-e917fc87ef50">
               <File Id="VigemClientDllFile"
                     Source="..\src\vigemclient.dll"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskInstallScript" Guid="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0004">
+            <Component Id="TaskInstallScript" Guid="71ad4c27-4f73-479d-b697-c6360fd8affa">
               <File Id="InstallTaskPs1"
                     Source="install-task.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskUninstallScript" Guid="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0005">
+            <Component Id="TaskUninstallScript" Guid="1ccf7433-5c95-4a14-b334-5600937e8d08">
               <File Id="UninstallTaskPs1"
                     Source="uninstall-task.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskXml" Guid="b54c0ce6-bbb0-4d51-9a3e-bbbbridge0006">
+            <Component Id="TaskXml" Guid="8f373892-bbfb-4f6f-8262-cd8c9f7686f8">
               <File Id="BridgeTaskXml"
                     Source="bridge-task.xml"
                     KeyPath="yes" />
