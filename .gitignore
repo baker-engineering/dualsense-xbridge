@@ -1,0 +1,15 @@
+# WiX build outputs
+installer/*.wixobj
+installer/*.wixpdb
+installer/*.msi
+
+# Release bundle (built by CI)
+*.zip
+
+# IDE / OS clutter
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+*.swp
+*~
