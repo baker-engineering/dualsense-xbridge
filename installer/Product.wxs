@@ -37,31 +37,31 @@
         <Directory Id="PUBLISHER_DIR" Name="BakerEngineering">
           <Directory Id="INSTALLFOLDER" Name="DualSense-Bridge">
 
-            <Component Id="BridgeScript" Guid="3bfa3f49-7f54-44c0-b9cc-c1137497010f">
+            <Component Id="BridgeScript" Guid="3bfa3f49-7f54-44c0-b9cc-c1137497010f" Win64="yes">
               <File Id="BridgePs1"
                     Source="..\src\bridge.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="VigemClientDll" Guid="bceaa9d9-20da-49cf-9be0-e917fc87ef50">
+            <Component Id="VigemClientDll" Guid="bceaa9d9-20da-49cf-9be0-e917fc87ef50" Win64="yes">
               <File Id="VigemClientDllFile"
                     Source="..\src\vigemclient.dll"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskInstallScript" Guid="71ad4c27-4f73-479d-b697-c6360fd8affa">
+            <Component Id="TaskInstallScript" Guid="71ad4c27-4f73-479d-b697-c6360fd8affa" Win64="yes">
               <File Id="InstallTaskPs1"
                     Source="install-task.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskUninstallScript" Guid="1ccf7433-5c95-4a14-b334-5600937e8d08">
+            <Component Id="TaskUninstallScript" Guid="1ccf7433-5c95-4a14-b334-5600937e8d08" Win64="yes">
               <File Id="UninstallTaskPs1"
                     Source="uninstall-task.ps1"
                     KeyPath="yes" />
             </Component>
 
-            <Component Id="TaskXml" Guid="8f373892-bbfb-4f6f-8262-cd8c9f7686f8">
+            <Component Id="TaskXml" Guid="8f373892-bbfb-4f6f-8262-cd8c9f7686f8" Win64="yes">
               <File Id="BridgeTaskXml"
                     Source="bridge-task.xml"
                     KeyPath="yes" />
