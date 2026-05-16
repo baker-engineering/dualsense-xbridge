@@ -1,18 +1,48 @@
-# DualSense XBridge — installer scaffold
+# DualSense XBridge
 
-Packages the bridge as a Windows MSI + winget manifest. Lets a user run:
+A Windows-side translator that reads HID input reports from a
+DualSense-class USB device and re-emits them as a virtual Xbox 360
+controller via [ViGEmBus](https://github.com/nefarius/ViGEmBus).
+The game sees a stock Xbox 360 controller (aim-assist, deadbands, the
+works); the upstream gadget sees nothing change.
 
-```
-winget install BakerEngineering.DualSenseXBridge
-```
+Designed as the Windows companion for **custom DualSense-emulating HID
+gadgets** — typically a Linux board (BeagleBone, Raspberry Pi, etc.)
+running a FunctionFS gadget that presents as VID `054C` / PID `0CE6`
+while the user actually drives it with keyboard + mouse, a touchscreen,
+or any other input source.
 
-and have ViGEmBus, HidHide, and the bridge all installed + auto-started.
+It's deliberately small: one PowerShell file (~250 lines) plus
+`vigemclient.dll`, no GUI, no profiles, no lightbar / battery /
+motion semantics. If you want a feature-rich DualSense driver for a
+real Sony controller, use
+[DS4Windows](https://github.com/Ryochan7/DS4Windows). If you want a
+stateless translator that disappears into a scheduled task and feeds
+XInput at 1 kHz, this is it.
 
-**Just want to install and play?** See [QUICKSTART.md](QUICKSTART.md) for
-the end-user setup walkthrough (Warzone-ready in ~10 minutes).
+## Who this is for
 
-This README covers the developer/packager side: layout, how to build the
-MSI, how to publish to the winget repo.
+- People building **custom HID gadgets that emulate a DualSense** and
+  need a Windows-side companion to expose the gadget as Xbox 360 input.
+- People who want **`winget install …`** to be the complete install
+  story: the manifest pulls ViGEmBus and HidHide as dependencies, the
+  MSI registers a scheduled task, and there's nothing else to wire up.
+- Specifically, the **Call of Duty: Warzone** use case — driving a
+  keyboard+mouse-fed gadget while the game applies controller-class
+  behavior. See [QUICKSTART.md](QUICKSTART.md) for the ~10-minute
+  end-user setup.
+
+## Who this is **not** for
+
+- Real-DualSense users (use DS4Windows — better motion / lightbar /
+  battery support).
+- Anyone who wants remappable profiles or a GUI (use
+  [reWASD](https://www.rewasd.com/) or DS4Windows).
+- Linux gaming (Steam Input handles native DualSense natively).
+
+The rest of this README is for developers and packagers — layout, how
+to build the MSI locally, how to publish a release. End users should
+read [QUICKSTART.md](QUICKSTART.md) instead.
 
 ## Layout
 
@@ -36,8 +66,8 @@ dualsense-xbridge/
 ## Build the MSI
 
 ```powershell
-winget install WixToolset.Wix              # one-time
-cd C:\Users\force\dualsense-xbridge\installer
+winget install WixToolset.Wix    # one-time
+cd installer
 .\build.ps1
 ```
 
