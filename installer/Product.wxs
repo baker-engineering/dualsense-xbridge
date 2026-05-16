@@ -22,6 +22,7 @@
     <Package InstallerVersion="500"
              Compressed="yes"
              InstallScope="perMachine"
+             Platform="x64"
              Description="DualSense -> ViGEm X360 bridge" />
 
     <MediaTemplate EmbedCab="yes" />
