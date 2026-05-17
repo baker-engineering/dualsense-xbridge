@@ -19,6 +19,11 @@ running a FunctionFS gadget that presents as VID `054C` / PID `0CE6`
 while the user actually drives it with keyboard + mouse, a touchscreen,
 or any other input source.
 
+To build the matching gadget end-to-end (host-side firmware, FunctionFS
+descriptors, input mapping daemons), see the other repos under
+[github.com/baker-engineering](https://github.com/baker-engineering).
+This project is just the Windows half of that stack.
+
 It's deliberately small: one PowerShell file (~250 lines) plus
 `vigemclient.dll`, no GUI, no profiles, no lightbar / battery /
 motion semantics. If you want a feature-rich DualSense driver for a
