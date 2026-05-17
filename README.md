@@ -1,5 +1,9 @@
 # DualSense XBridge
 
+[![CI](https://github.com/baker-engineering/dualsense-xbridge/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/baker-engineering/dualsense-xbridge/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/baker-engineering/dualsense-xbridge?label=release)](https://github.com/baker-engineering/dualsense-xbridge/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Project home:** https://github.com/baker-engineering/dualsense-xbridge
 | **License:** MIT | **Releases:** [GitHub Releases](https://github.com/baker-engineering/dualsense-xbridge/releases)
 
@@ -141,6 +145,28 @@ flagging:
 Other characteristics: 1 kHz push rate, 500 ms reconnect backoff,
 forever-loop on transient failures, full XInput button mapping including
 DPad nibble decode.
+
+## How this is tested
+
+Every push to `main` and every `v*.*.*` tag triggers
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which
+runs the following parallel jobs on `windows-latest` runners. A green
+build means every job in the table passed for the commit:
+
+| Job | What it does | What a pass means |
+|---|---|---|
+| **`build vigemclient.dll (x64)`** | Checks out [`nefarius/ViGEmClient`](https://github.com/nefarius/ViGEmClient) at the pinned `VIGEMCLIENT_REF`, builds the shared library with `cmake -G "Visual Studio 17 2022" -A x64 -DViGEmClient_DLL=ON -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON`, then runs `dumpbin /EXPORTS` and asserts every `vigem_*` symbol the bridge `DllImport`s is exported. | The x64 native client DLL bundled into our MSI is a fresh, reproducible build from a known upstream commit, not a vendored blob, and contains all required entry points. |
+| **`build vigemclient.dll (arm64)`** | Same recipe with `-A ARM64`. | Same guarantee for the arm64 MSI. |
+| **`build msi (x64)` / `build msi (arm64)`** | Downloads the matching source-built DLL, runs `candle` + `light` against [`installer/Product.wxs`](installer/Product.wxs), bundles MSI + docs + winget manifests into `DualSenseXBridge-<version>-<arch>.zip`. | WiX accepts every component (UpgradeCode, ProductCode, Win64 attribute, scheduled-task CustomActions) and the MSI is well-formed. |
+| **`e2e (xinput state assertions)`** | Installs ViGEmBus on the runner via the official Nefarius installer, then for each fixture in [`tests/fixtures/`](tests/fixtures/) runs the bridge in `-StubReportFile` mode, scans XInput slots 0-3 for the one whose `wButtons` / `sThumbLX` / triggers match expected, asserts. 9 cases cover face buttons (A/B/X/Y), START, dpad, left-stick saturation, and trigger. | The bridge's HID-byte → XInput-state translation is byte-for-byte correct on the actual ViGEm/XInput round trip, not just in code-review. |
+| **`perf (sustained rate >= 500 Hz)`** | Runs the bridge with `-MaxReports 5000` against `neutral.bin`, parses the `PERF` log line, asserts sustained processing rate ≥ 500 Hz. On a clean lab box the floor is ~6 kHz. | The PowerShell + P/Invoke per-iter overhead is comfortably below the 1 kHz upstream target — real-time pushing has headroom. Catches major regressions (e.g. an inefficient hot-path refactor). |
+| **`publish github release`** | Only fires on `v*.*.*` tag push and only if every job above passed. Downloads both arch bundle zips and creates a GitHub Release with them attached. | The release tag carries matching x64+arm64 artifacts and the bridge passed every check. |
+
+### Running the same checks locally
+
+- **Build the MSI:** `winget install WiXToolset.WiXToolset` once, then `cd installer && powershell -ExecutionPolicy Bypass -File .\build.ps1`. Add `-Arch arm64` for the ARM64 variant (requires an ARM64 vigemclient.dll under `src/`).
+- **E2E suite:** `powershell -ExecutionPolicy Bypass -File tests\e2e.ps1`. State-matching means it tolerates one already-running bridge on slot 0; the test bridge will land on slot 1.
+- **Perf rate:** `powershell -ExecutionPolicy Bypass -File tests\perf.ps1`. Stop any locally-installed bridge first or the perf bridge will compete with it for ViGEm slots.
 
 ## What's NOT done
 
