@@ -1,19 +1,25 @@
 name: release
 
-# Runs on every push of a v* tag. Builds the MSI, bundles it with the
-# quickstart + winget manifests into a single zip, and attaches the zip to
-# a GitHub Release.
+# Fires on:
+#   - push to main          (build + upload artifact; no public release)
+#   - push of a v* tag      (build + upload + publish a GitHub Release)
+#   - workflow_dispatch     (build + upload; release only if dispatched on a tag)
 #
-# Triggering: git tag v3.0.0 && git push origin v3.0.0
+# Non-tag builds use a 0.0.0-<short-sha> version so artifacts can be
+# downloaded from the workflow run page for smoke-testing without
+# publishing anything.
+#
+# Triggering a public release: git tag v1.0.1 && git push origin v1.0.1
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*.*.*'
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # required for softprops/action-gh-release
+  contents: write   # required for softprops/action-gh-release (tag builds only)
 
 jobs:
   build:
@@ -24,18 +30,27 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: derive version from tag
+      - name: derive version
         id: ver
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
-            Write-Error "tag '$tag' is not v<major>.<minor>.<patch>"
-            exit 1
+          $ref = "${{ github.ref }}"
+          if ($ref.StartsWith("refs/tags/")) {
+            $tag = $ref.Substring("refs/tags/".Length)
+            if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
+              Write-Error "tag '$tag' is not v<major>.<minor>.<patch>"
+              exit 1
+            }
+            $v = $matches[1]
+            $isRelease = "true"
+          } else {
+            $sha = "${{ github.sha }}".Substring(0,7)
+            $v = "0.0.0-$sha"
+            $isRelease = "false"
           }
-          $v = $matches[1]
-          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "version=$v"
+          "version=$v"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "version=$v  is_release=$isRelease"
 
       - name: install WiX v3
         shell: pwsh
@@ -97,6 +112,7 @@ jobs:
           if-no-files-found: error
 
       - name: create github release
+        if: steps.ver.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: DualSenseXBridge-${{ steps.ver.outputs.version }}.zip
