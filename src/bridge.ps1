@@ -320,13 +320,34 @@ function Run-Bridge {
 # Forever loop: relaunch on any failure with 500 ms backoff so the bridge
 # survives transient DualSense replugs, BBB-side daemon restarts, mode
 # switches, ViGEm hiccups.
+#
+# Log dedupe: when the same error repeats (e.g. DualSense unplugged for
+# minutes), log the first occurrence, then once every 120 retries
+# (~ once per minute at the 500 ms cadence). Always log on transition
+# so the log clearly shows when the state changed.
 Log "BOOT pid=$PID forever-mode script=$ScriptDir log=$LOG"
+$lastErr = ''
+$repeatCount = 0
 while ($true) {
     try {
         Run-Bridge
         Log "Run-Bridge returned without exception; restarting in 500ms"
+        $lastErr = ''; $repeatCount = 0
     } catch {
-        Log "ERROR: $($_.Exception.Message); restarting in 500ms"
+        $msg = $_.Exception.Message
+        if ($msg -eq $lastErr) {
+            $repeatCount++
+            if ($repeatCount % 120 -eq 0) {
+                Log "ERROR: $msg (still failing, $repeatCount retries since first occurrence)"
+            }
+        } else {
+            if ($lastErr -ne '' -and $repeatCount -gt 0) {
+                Log "(previous error '$lastErr' cleared after $repeatCount retries)"
+            }
+            Log "ERROR: $msg; restarting in 500ms"
+            $lastErr = $msg
+            $repeatCount = 1
+        }
     }
     Start-Sleep -Milliseconds 500
 }
