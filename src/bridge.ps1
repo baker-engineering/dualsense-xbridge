@@ -126,7 +126,7 @@ function Find-DualSenseInstanceId {
     $dev = Get-PnpDevice -PresentOnly -Class HIDClass -ErrorAction SilentlyContinue |
            Where-Object { $_.InstanceId -like $pattern -and $_.Status -eq 'OK' } |
            Select-Object -First 1
-    if (-not $dev) { throw "DualSense ($DS_VID:$DS_PID) not present or not OK" }
+    if (-not $dev) { throw "DualSense (${DS_VID}:${DS_PID}) not present or not OK" }
     return $dev.InstanceId
 }
 
