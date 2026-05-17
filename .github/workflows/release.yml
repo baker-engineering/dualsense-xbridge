@@ -239,6 +239,7 @@ jobs:
     name: e2e (xinput state assertions)
     needs: build-vigemclient
     runs-on: windows-latest
+    timeout-minutes: 8
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -304,9 +305,58 @@ jobs:
             }
           }
 
+  perf-test:
+    name: perf (sustained rate >= 500 Hz)
+    needs: build-vigemclient
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: pull source-built x64 vigemclient dll
+        uses: actions/download-artifact@v4
+        with:
+          name: vigemclient-x64
+          path: src/
+
+      - name: install source-built dll as vigemclient.dll
+        shell: pwsh
+        run: |
+          Copy-Item -Force src/vigemclient.x64.dll src/vigemclient.dll
+          Get-FileHash src/vigemclient.dll -Algorithm SHA256 | Format-List
+
+      - name: install ViGEmBus (official Nefarius installer)
+        shell: pwsh
+        run: |
+          $ver = '1.22.0'
+          $url = "https://github.com/nefarius/ViGEmBus/releases/download/v$ver/ViGEmBus_${ver}_x64_x86_arm64.exe"
+          $exe = "$env:RUNNER_TEMP\ViGEmBus_setup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
+          $p = Start-Process -FilePath $exe -ArgumentList '/quiet','/norestart' -Wait -PassThru
+          Write-Host "installer exit code: $($p.ExitCode)"
+          pnputil /scan-devices | Out-Null
+          Start-Sleep -Seconds 3
+
+      - name: run perf test
+        shell: pwsh
+        run: |
+          try {
+            .\tests\perf.ps1
+          } finally {
+            Write-Host ""
+            Write-Host "===== bridge.log tail (post-perf diagnostic) ====="
+            $log = Join-Path $env:ProgramData 'dualsense-xbridge\bridge.log'
+            if (Test-Path $log) {
+              Get-Content $log -Tail 20
+            } else {
+              Write-Host "(bridge.log not found at $log)"
+            }
+          }
+
   release:
     name: publish github release
-    needs: [build, e2e-test]
+    needs: [build, e2e-test, perf-test]
     runs-on: windows-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
