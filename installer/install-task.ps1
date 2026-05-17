@@ -14,6 +14,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Defensive: MSI's CustomAction ExeCommand passes the install folder as
+# "[INSTALLFOLDER]" which, when [INSTALLFOLDER] ends with a backslash,
+# emits a literal \" sequence on the powershell.exe command line.
+# powershell.exe's argument parser interprets \" as an escaped quote and
+# strips the backslash, so we receive `C:\Program Files\...\App"` instead
+# of `C:\Program Files\...\App\`. Strip any trailing quotes and re-add a
+# trailing backslash so Join-Path works regardless of how we got here.
+$InstallFolder = $InstallFolder.Trim('"').TrimEnd('\') + '\'
+
 $TaskName = 'DualSenseXBridge'
 $BridgePs1 = Join-Path $InstallFolder 'bridge.ps1'
 

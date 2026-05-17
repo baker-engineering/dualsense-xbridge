@@ -100,9 +100,17 @@
          than SYSTEM. Register-ScheduledTask under SYSTEM fails with rc=1 for
          the principal+task combination we use; under the elevated user token
          it succeeds. See v1.1.0 -> v1.1.1 bugfix. -->
+    <!-- The trailing "." after [INSTALLFOLDER] is intentional. [INSTALLFOLDER]
+         expands with a trailing backslash, and "[INSTALLFOLDER]" by itself
+         would produce ...App\" on the command line, which powershell.exe's
+         argument parser treats as an escaped quote (\" -> ") and corrupts
+         the parameter value into '...App"'. Appending '.' makes the trailing
+         character a benign dot ('...App\.'), preserving the closing quote and
+         giving install-task.ps1 a usable path. The script also strips
+         trailing quotes defensively. -->
     <CustomAction Id="RegisterTask"
                   Property="POWERSHELLEXE"
-                  ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install-task.ps1" -InstallFolder "[INSTALLFOLDER]"'
+                  ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install-task.ps1" -InstallFolder "[INSTALLFOLDER]."'
                   Execute="deferred"
                   Impersonate="yes"
                   Return="check" />
