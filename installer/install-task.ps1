@@ -51,7 +51,18 @@ $action = New-ScheduledTaskAction `
     -Execute 'powershell.exe' `
     -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BridgePs1`""
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+# Two triggers act as a watchdog pair:
+#   1. AtLogOn   -- start as soon as the user logs in (normal path).
+#   2. Once + RepetitionInterval=1min -- fires every minute forever.
+#      MultipleInstances=IgnoreNew (the default) means this is a no-op
+#      when the bridge is already running, but if the powershell host
+#      ever exits 0 (which the forever-loop does on external kill), the
+#      next 1-min tick relaunches it. RestartCount only fires on
+#      non-zero exit, so it would not catch that case on its own.
+$triggers = @(
+    (New-ScheduledTaskTrigger -AtLogOn),
+    (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1))
+)
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -71,7 +82,7 @@ $principal = New-ScheduledTaskPrincipal `
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger $triggers `
     -Settings $settings `
     -Principal $principal `
     -Description 'DualSense -> ViGEm X360 bridge (DualSense XBridge)'
