@@ -22,6 +22,26 @@ if (-not (Test-Path $BridgePs1)) {
     exit 1
 }
 
+# Pre-create the log directory with an explicit Users:Modify ACE that
+# inherits to files. Without this, bridge.log gets created the first time
+# under whichever security context wrote first; if that's an admin (e.g. a
+# manual elevated run), the file inherits Users:ReadAndExecute only and the
+# scheduled task (which runs as BUILTIN\Users RunLevel=Limited) can't append
+# -- Add-Content fails silently because the default $ErrorActionPreference
+# in bridge.ps1's log function is Continue, and the bridge appears alive
+# but produces zero log output.
+$LogDir = Join-Path $env:ProgramData 'dualsense-xbridge'
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+}
+$acl = Get-Acl $LogDir
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    'BUILTIN\Users', 'Modify',
+    'ContainerInherit,ObjectInherit', 'None', 'Allow')
+$acl.AddAccessRule($rule)
+Set-Acl -Path $LogDir -AclObject $acl
+Write-Host "Granted BUILTIN\Users Modify on $LogDir (inherits to bridge.log)"
+
 # Remove any stale task by the same name before creating
 Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | ForEach-Object {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
