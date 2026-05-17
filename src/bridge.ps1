@@ -3,7 +3,7 @@
 # (VID 054C, PID 0CE6) and pushes them to a virtual Xbox 360 controller via
 # ViGEmBus, so games see a stock X360 controller.
 #
-# Distributable v1.1.0:
+# Distributable v1.1.1:
 #  - DLL loaded relative to script (no Costura temp-path dependency)
 #  - DualSense device-instance-id discovered at runtime (no hardcoded port)
 #  - Log directory chosen at runtime (ProgramData if writable, else script dir)
