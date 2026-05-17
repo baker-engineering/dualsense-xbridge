@@ -180,9 +180,35 @@ jobs:
           path: DualSenseXBridge-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.zip
           if-no-files-found: error
 
+  e2e-test:
+    name: e2e (xinput state assertions)
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install ViGEmBus
+        shell: pwsh
+        run: |
+          choco install vigembus -y --no-progress
+          # Driver registers a PnP node; sanity-check it appears.
+          $vigem = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+                   Where-Object { $_.FriendlyName -like '*ViGEmBus*' -or $_.InstanceId -like '*nefarius*ViGEm*' } |
+                   Select-Object -First 1
+          if ($vigem) {
+            Write-Host "ViGEmBus present: $($vigem.FriendlyName) / $($vigem.InstanceId) / Status=$($vigem.Status)"
+          } else {
+            Write-Host "WARN: ViGEmBus PnP node not visible yet -- proceeding; e2e will retry on slot scan"
+          }
+
+      - name: run e2e suite
+        shell: pwsh
+        run: |
+          .\tests\e2e.ps1
+
   release:
     name: publish github release
-    needs: build
+    needs: [build, e2e-test]
     runs-on: windows-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
