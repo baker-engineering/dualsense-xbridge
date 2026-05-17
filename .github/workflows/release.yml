@@ -67,22 +67,63 @@ jobs:
           # x64 and ARM64. -DViGEmClient_DLL=ON flips the target from
           # static lib to dll.
           $arch = '${{ matrix.cmake_arch }}'
-          cmake -G "Visual Studio 17 2022" -A $arch -DViGEmClient_DLL=ON -S . -B build-$arch
+          # Upstream's ViGEmClientShared target doesn't decorate functions
+          # with __declspec(dllexport) and doesn't ship a .def file, so a
+          # plain shared-lib build produces a DLL with zero public exports
+          # ("Unable to find an entry point named 'vigem_alloc'"). Setting
+          # CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON makes MSVC auto-export every
+          # non-static public symbol -- equivalent to a generated .def.
+          cmake -G "Visual Studio 17 2022" -A $arch `
+                -DViGEmClient_DLL=ON `
+                -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON `
+                -S . -B build-$arch
           if ($LASTEXITCODE -ne 0) { Write-Error "cmake configure failed"; exit 1 }
-          cmake --build build-$arch --config Release --verbose
+          cmake --build build-$arch --config Release --target ViGEmClientShared --verbose
           if ($LASTEXITCODE -ne 0) { Write-Error "cmake build failed"; exit 1 }
-          $dll = Get-ChildItem -Filter 'ViGEmClient.dll' -Recurse -Path build-$arch |
-                 Select-Object -First 1
-          if (-not $dll) {
-            Write-Host "build tree contents:"
-            Get-ChildItem -Recurse build-$arch | Select-Object FullName, Length |
+          # The shared target's OUTPUT_NAME is ViGEmClient and SUFFIX is .dll;
+          # the file lands at build-<arch>/Release/ViGEmClient.dll regardless
+          # of size (a properly built minimal C client lib is ~30-50 KB).
+          $dllPath = "build-$arch/Release/ViGEmClient.dll"
+          if (-not (Test-Path $dllPath)) {
+            Write-Host "build tree (.dll / .lib / .def):"
+            Get-ChildItem -Recurse build-$arch -Include '*.dll','*.lib','*.def' -ErrorAction SilentlyContinue |
+              Select-Object FullName, Length |
               Format-Table -AutoSize
-            Write-Error "ViGEmClient.dll not produced by build"
+            Write-Error "ViGEmClient.dll not produced at expected path: $dllPath"
             exit 1
           }
+          $dll = Get-Item $dllPath
+          Write-Host "produced: $($dll.FullName)  $($dll.Length) bytes"
+          # Sanity-check exports: the bridge's DllImport requires vigem_alloc,
+          # vigem_connect, vigem_target_add, and vigem_target_x360_update at
+          # minimum. Run dumpbin /EXPORTS, parse, and fail loudly if any are
+          # missing. This catches the empty-exports regression at build time
+          # instead of waiting for the e2e step to surface a runtime miss.
+          $dumpbin = (Get-Command dumpbin -ErrorAction SilentlyContinue).Source
+          if (-not $dumpbin) {
+            $dumpbin = (Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          }
+          if ($dumpbin) {
+            $exportLines = & $dumpbin /EXPORTS $dll.FullName
+            $vigemExports = $exportLines | Select-String -Pattern 'vigem_\w+'
+            Write-Host "exports matching vigem_*:"
+            $vigemExports | ForEach-Object { "  $_" }
+            $required = @('vigem_alloc','vigem_connect','vigem_target_add','vigem_target_x360_update','vigem_target_x360_alloc','vigem_disconnect','vigem_free')
+            $missing = @()
+            foreach ($r in $required) {
+              if (-not ($vigemExports -match "\b$r\b")) { $missing += $r }
+            }
+            if ($missing.Count -gt 0) {
+              Write-Error ("Required vigem_* exports missing from DLL: " + ($missing -join ', '))
+              exit 1
+            }
+            Write-Host "all required vigem_* exports present"
+          } else {
+            Write-Host "WARN: dumpbin not on PATH; skipping export-table sanity check"
+          }
           $outName = "vigemclient.${{ matrix.arch }}.dll"
-          Write-Host "produced: $($dll.FullName)  $($dll.Length) bytes  ->  $outName"
           Copy-Item $dll.FullName "../$outName"
+          Write-Host "staged $outName"
 
       - name: upload ${{ matrix.arch }} dll
         uses: actions/upload-artifact@v4
@@ -216,24 +257,52 @@ jobs:
           Copy-Item -Force src/vigemclient.x64.dll src/vigemclient.dll
           Get-FileHash src/vigemclient.dll -Algorithm SHA256 | Format-List
 
-      - name: install ViGEmBus
+      - name: install ViGEmBus (official Nefarius installer)
         shell: pwsh
         run: |
-          choco install vigembus -y --no-progress
-          # Driver registers a PnP node; sanity-check it appears.
+          # The choco vigembus package lays down driver files but on
+          # github-hosted windows-latest doesn't always create the bus
+          # PnP device, leaving vigem_connect failing. The official
+          # multi-arch installer handles both steps.
+          $ver = '1.22.0'
+          $url = "https://github.com/nefarius/ViGEmBus/releases/download/v$ver/ViGEmBus_${ver}_x64_x86_arm64.exe"
+          $exe = "$env:RUNNER_TEMP\ViGEmBus_setup.exe"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
+          Write-Host "Running $exe /quiet ..."
+          $p = Start-Process -FilePath $exe -ArgumentList '/quiet','/norestart' -Wait -PassThru
+          Write-Host "exit code: $($p.ExitCode)"
+          # Trigger a PnP enumeration so the bus device appears without a reboot
+          pnputil /scan-devices | Out-Null
+          Start-Sleep -Seconds 3
           $vigem = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-                   Where-Object { $_.FriendlyName -like '*ViGEmBus*' -or $_.InstanceId -like '*nefarius*ViGEm*' } |
-                   Select-Object -First 1
+                   Where-Object { $_.InstanceId -like 'ROOT\\VIGEM*' -or $_.FriendlyName -like '*ViGEm*' -or $_.Manufacturer -like '*Nefarius*' } |
+                   Select-Object -First 5
           if ($vigem) {
-            Write-Host "ViGEmBus present: $($vigem.FriendlyName) / $($vigem.InstanceId) / Status=$($vigem.Status)"
+            $vigem | Select-Object Status, Problem, FriendlyName, InstanceId | Format-List
           } else {
-            Write-Host "WARN: ViGEmBus PnP node not visible yet -- proceeding; e2e will retry on slot scan"
+            Write-Host "WARN: no ViGEm-related PnP node visible after install + rescan"
+            Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+              Where-Object { $_.InstanceId -like 'ROOT\\*' } |
+              Select-Object InstanceId, FriendlyName, Status |
+              Format-Table -AutoSize
           }
 
       - name: run e2e suite
         shell: pwsh
         run: |
-          .\tests\e2e.ps1
+          try {
+            .\tests\e2e.ps1
+          } finally {
+            Write-Host ""
+            Write-Host "===== bridge.log tail (post-e2e diagnostic) ====="
+            $log = Join-Path $env:ProgramData 'dualsense-xbridge\bridge.log'
+            if (Test-Path $log) {
+              Get-Content $log -Tail 40
+            } else {
+              Write-Host "(bridge.log not found at $log)"
+            }
+          }
 
   release:
     name: publish github release
