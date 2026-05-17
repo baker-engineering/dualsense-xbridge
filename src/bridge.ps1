@@ -16,7 +16,12 @@ param(
     # reports. When set, the bridge skips DualSense discovery and feeds
     # the recorded bytes into the ViGEm push loop, looping at EOF. Used
     # for CI tests against a virtual stand-in.
-    [string] $StubReportFile = ''
+    [string] $StubReportFile = '',
+
+    # Process at most this many reports, then log a "PERF ..." line with
+    # the sustained rate (reports / wallclock) and exit 0. 0 = run
+    # forever (the production path). Used by the perf test.
+    [int] $MaxReports = 0
 )
 
 # --- Path resolution -------------------------------------------------------
@@ -224,6 +229,7 @@ function Run-Bridge {
         $count = 0
         $pushes = 0
         $lastHeartbeat = Get-Date
+        $perfStart = Get-Date
 
         while ($true) {
             $buf = New-Object byte[] 64
@@ -275,6 +281,25 @@ function Run-Bridge {
             if (((Get-Date) - $lastHeartbeat).TotalSeconds -ge 30) {
                 Log "tick count=$count pushes=$pushes vigem-idx=$idx"
                 $lastHeartbeat = Get-Date
+            }
+
+            # Perf cutoff: when -MaxReports N was passed, after N reports
+            # log a PERF summary and exit cleanly (no reconnect). Used by
+            # tests/perf.ps1 to measure sustained processing rate.
+            if ($MaxReports -gt 0 -and $count -ge $MaxReports) {
+                $elapsedMs = ((Get-Date) - $perfStart).TotalMilliseconds
+                $rate = if ($elapsedMs -gt 0) { $count / ($elapsedMs / 1000.0) } else { 0.0 }
+                Log ("PERF total_reports={0} pushes={1} elapsed_ms={2:F1} rate={3:F1}Hz" -f $count, $pushes, $elapsedMs, $rate)
+                # Unplug ViGEm + close handles before exiting so the next
+                # invocation has a clean slate; the outer finally would
+                # do this too but we want to exit the forever-loop entirely.
+                try { [VG]::vigem_target_remove($client, $target) | Out-Null } catch {}
+                [VG]::vigem_target_free($target); $target = $null
+                try { [VG]::vigem_disconnect($client) } catch {}
+                [VG]::vigem_free($client); $client = $null
+                if ($fs) { $fs.Dispose(); $fs = $null }
+                if ($h)  { $h.Dispose(); $h = $null }
+                exit 0
             }
         }
     }
