@@ -94,18 +94,24 @@
                       Name="Path" />
     </Property>
 
+    <!-- Both CAs run deferred (so they execute during InstallExecuteSequence
+         with elevated rights) but with Impersonate="yes" (the default) so the
+         spawned powershell.exe inherits the installing user's token rather
+         than SYSTEM. Register-ScheduledTask under SYSTEM fails with rc=1 for
+         the principal+task combination we use; under the elevated user token
+         it succeeds. See v1.1.0 -> v1.1.1 bugfix. -->
     <CustomAction Id="RegisterTask"
                   Property="POWERSHELLEXE"
                   ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install-task.ps1" -InstallFolder "[INSTALLFOLDER]"'
                   Execute="deferred"
-                  Impersonate="no"
+                  Impersonate="yes"
                   Return="check" />
 
     <CustomAction Id="UnregisterTask"
                   Property="POWERSHELLEXE"
                   ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[INSTALLFOLDER]uninstall-task.ps1"'
                   Execute="deferred"
-                  Impersonate="no"
+                  Impersonate="yes"
                   Return="check" />
 
     <InstallExecuteSequence>
