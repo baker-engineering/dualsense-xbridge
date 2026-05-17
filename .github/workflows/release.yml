@@ -38,9 +38,17 @@ env:
   VIGEMCLIENT_REF: master
 
 jobs:
-  build-arm64-dll:
-    name: build vigemclient.arm64.dll from source
+  build-vigemclient:
+    name: build vigemclient.dll (${{ matrix.arch }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            cmake_arch: x64
+          - arch: arm64
+            cmake_arch: ARM64
     steps:
       - name: checkout nefarius/ViGEmClient
         uses: actions/checkout@v4
@@ -50,39 +58,42 @@ jobs:
           submodules: recursive
           path: vigemclient-src
 
-      - name: build ARM64 dll via cmake
+      - name: build ${{ matrix.cmake_arch }} dll via cmake
         shell: pwsh
         working-directory: vigemclient-src
         run: |
-          # Upstream sln declares only x86/x64. Use the CMake build with
-          # the Visual Studio generator + -A ARM64 to cross-compile.
-          # -DViGEmClient_DLL=ON flips the target from static lib to dll.
-          cmake -G "Visual Studio 17 2022" -A ARM64 -DViGEmClient_DLL=ON -S . -B build-arm64
+          # Upstream sln declares only x86/x64; use the CMake build with
+          # the Visual Studio generator so the same recipe handles both
+          # x64 and ARM64. -DViGEmClient_DLL=ON flips the target from
+          # static lib to dll.
+          $arch = '${{ matrix.cmake_arch }}'
+          cmake -G "Visual Studio 17 2022" -A $arch -DViGEmClient_DLL=ON -S . -B build-$arch
           if ($LASTEXITCODE -ne 0) { Write-Error "cmake configure failed"; exit 1 }
-          cmake --build build-arm64 --config Release --verbose
+          cmake --build build-$arch --config Release --verbose
           if ($LASTEXITCODE -ne 0) { Write-Error "cmake build failed"; exit 1 }
-          $dll = Get-ChildItem -Filter 'ViGEmClient.dll' -Recurse -Path build-arm64 |
+          $dll = Get-ChildItem -Filter 'ViGEmClient.dll' -Recurse -Path build-$arch |
                  Select-Object -First 1
           if (-not $dll) {
             Write-Host "build tree contents:"
-            Get-ChildItem -Recurse build-arm64 | Select-Object FullName, Length |
+            Get-ChildItem -Recurse build-$arch | Select-Object FullName, Length |
               Format-Table -AutoSize
             Write-Error "ViGEmClient.dll not produced by build"
             exit 1
           }
-          Write-Host "produced: $($dll.FullName)  $($dll.Length) bytes"
-          Copy-Item $dll.FullName ../vigemclient.arm64.dll
+          $outName = "vigemclient.${{ matrix.arch }}.dll"
+          Write-Host "produced: $($dll.FullName)  $($dll.Length) bytes  ->  $outName"
+          Copy-Item $dll.FullName "../$outName"
 
-      - name: upload arm64 dll
+      - name: upload ${{ matrix.arch }} dll
         uses: actions/upload-artifact@v4
         with:
-          name: vigemclient-arm64
-          path: vigemclient.arm64.dll
+          name: vigemclient-${{ matrix.arch }}
+          path: vigemclient.${{ matrix.arch }}.dll
           if-no-files-found: error
 
   build:
     name: build msi (${{ matrix.arch }})
-    needs: build-arm64-dll
+    needs: build-vigemclient
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -114,12 +125,15 @@ jobs:
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "version=$v  is_release=$isRelease"
 
-      - name: pull arm64 dll
-        if: matrix.arch == 'arm64'
+      - name: pull source-built vigemclient dll
         uses: actions/download-artifact@v4
         with:
-          name: vigemclient-arm64
+          name: vigemclient-${{ matrix.arch }}
           path: src/
+      # Overwrites the vendored src/vigemclient.<arch>.dll (and, for x64
+      # only, the vendored src/vigemclient.dll used by direct script
+      # invocation) with the CI source-build. This guarantees the MSI
+      # ships bytes we built ourselves from a pinned upstream commit.
 
       - name: install WiX v3
         shell: pwsh
@@ -182,10 +196,25 @@ jobs:
 
   e2e-test:
     name: e2e (xinput state assertions)
+    needs: build-vigemclient
     runs-on: windows-latest
     steps:
       - name: checkout
         uses: actions/checkout@v4
+
+      - name: pull source-built x64 vigemclient dll
+        uses: actions/download-artifact@v4
+        with:
+          name: vigemclient-x64
+          path: src/
+      # Drop the CI-built copy in place as vigemclient.dll so the bridge's
+      # DllImport literal resolves to source-built bytes, not the vendored
+      # Costura-extracted binary in the repo.
+      - name: install source-built dll as vigemclient.dll
+        shell: pwsh
+        run: |
+          Copy-Item -Force src/vigemclient.x64.dll src/vigemclient.dll
+          Get-FileHash src/vigemclient.dll -Algorithm SHA256 | Format-List
 
       - name: install ViGEmBus
         shell: pwsh
