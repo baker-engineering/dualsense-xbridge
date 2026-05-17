@@ -233,10 +233,21 @@ function Run-Bridge {
             if ($task.Result -lt 11) { throw "short read len=$($task.Result)" }
             $count++
 
-            $report.sThumbLX = [int16](([int]$buf[1] - 128) * 257)
-            $report.sThumbLY = [int16](((128 - [int]$buf[2])) * 257)
-            $report.sThumbRX = [int16](([int]$buf[3] - 128) * 257)
-            $report.sThumbRY = [int16](((128 - [int]$buf[4])) * 257)
+            # DualSense raw axis 0..255 -> XInput int16 -32768..32767.
+            # (raw - 128) * 257 overshoots int16's lower bound at raw=0
+            # ((0-128)*257 = -32896), so clamp before the cast.
+            $lx = ([int]$buf[1] - 128) * 257
+            $ly = (128 - [int]$buf[2]) * 257
+            $rx = ([int]$buf[3] - 128) * 257
+            $ry = (128 - [int]$buf[4]) * 257
+            if ($lx -lt -32768) { $lx = -32768 } elseif ($lx -gt 32767) { $lx = 32767 }
+            if ($ly -lt -32768) { $ly = -32768 } elseif ($ly -gt 32767) { $ly = 32767 }
+            if ($rx -lt -32768) { $rx = -32768 } elseif ($rx -gt 32767) { $rx = 32767 }
+            if ($ry -lt -32768) { $ry = -32768 } elseif ($ry -gt 32767) { $ry = 32767 }
+            $report.sThumbLX = [int16]$lx
+            $report.sThumbLY = [int16]$ly
+            $report.sThumbRX = [int16]$rx
+            $report.sThumbRY = [int16]$ry
             $report.bLeftTrigger = $buf[5]
             $report.bRightTrigger = $buf[6]
 
