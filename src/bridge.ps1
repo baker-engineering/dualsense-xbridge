@@ -8,6 +8,16 @@
 #  - DualSense device-instance-id discovered at runtime (no hardcoded port)
 #  - Log directory chosen at runtime (ProgramData if writable, else script dir)
 #  - Forever-loop with 500 ms reconnect on transient failures
+#  - -StubReportFile <path> replays a recorded HID report from disk instead
+#    of opening a real DualSense device (used by the e2e test suite)
+
+param(
+    # Path to a binary file containing one or more 64-byte DualSense HID
+    # reports. When set, the bridge skips DualSense discovery and feeds
+    # the recorded bytes into the ViGEm push loop, looping at EOF. Used
+    # for CI tests against a virtual stand-in.
+    [string] $StubReportFile = ''
+)
 
 # --- Path resolution -------------------------------------------------------
 
@@ -143,6 +153,39 @@ function Open-DualSense {
     return $h
 }
 
+# Build an input stream that yields 64-byte HID reports. In real mode this
+# is the HID device file handle wrapped in a FileStream; in stub mode it is
+# a MemoryStream pre-loaded with the recorded report repeated enough times
+# to feed the read loop for ~5 minutes at 1 kHz (the loop re-enters the
+# function if it runs out, so longer runs still work).
+function Open-InputStream {
+    if ($StubReportFile -ne '') {
+        if (-not (Test-Path $StubReportFile)) {
+            throw "stub file not found: $StubReportFile"
+        }
+        $raw = [System.IO.File]::ReadAllBytes($StubReportFile)
+        if ($raw.Length -lt 11) {
+            throw "stub file too small: $($raw.Length) bytes (need >= 11)"
+        }
+        # Pad/truncate to a single 64-byte report
+        $report = New-Object byte[] 64
+        $n = [Math]::Min($raw.Length, 64)
+        [System.Array]::Copy($raw, 0, $report, 0, $n)
+        # Replicate ~300k times -> ~5 minutes at 1 kHz, ~19 MB in memory
+        $reportCount = 300000
+        $bigBuf = New-Object byte[] ($reportCount * 64)
+        for ($i = 0; $i -lt $reportCount; $i++) {
+            [System.Array]::Copy($report, 0, $bigBuf, $i * 64, 64)
+        }
+        $ms = New-Object System.IO.MemoryStream(,$bigBuf)
+        Log "STUB mode: replaying $StubReportFile ($($raw.Length) src bytes, $reportCount reports queued)"
+        return @{ Stream = $ms; Handle = $null; Stub = $true }
+    }
+    $h = Open-DualSense
+    $fs = New-Object System.IO.FileStream($h, [System.IO.FileAccess]::ReadWrite, 64, $true)
+    return @{ Stream = $fs; Handle = $h; Stub = $false }
+}
+
 # Plug a virtual X360 target. vigem_target_get_index() returns ViGEm's
 # internal target-array index, NOT the XInput user index — real XInput
 # delivery goes to whichever slot Windows assigns next.
@@ -161,8 +204,9 @@ function Plug-X360($client) {
 function Run-Bridge {
     $h = $null; $fs = $null; $client = $null; $target = $null
     try {
-        $h = Open-DualSense
-        $fs = New-Object System.IO.FileStream($h, [System.IO.FileAccess]::ReadWrite, 64, $true)
+        $src = Open-InputStream
+        $h = $src.Handle
+        $fs = $src.Stream
 
         $client = [VG]::vigem_alloc()
         $rc = [VG]::vigem_connect($client)
